@@ -28,6 +28,7 @@ function createGame() {
     score: 0,
     lives: 3,
     dotsRemaining: dots,
+    time: 0,
     grid,
     pacman: {
       x: PACMAN_START.x,
@@ -42,6 +43,7 @@ function createGame() {
       dir: 'up',
       speed: GHOST_SPEED,
       kind: g.kind,
+      delay: g.delay,
     } ) ),
   };
 }
@@ -110,9 +112,51 @@ function movePacman( game ) {
   wrapTunnel( p, width );
 }
 
+function clampTile( v, max ) {
+  return Math.max( 0, Math.min( max, v ) );
+}
+
+// Objetivo de persecucion (tiles) de cada fantasma.
+//   blinky: celda actual de Pacman
+//   pinky:  4 celdas por delante de Pacman segun su direccion
+//   inky:   2 x (Pacman + 2 x dir) - blinky
+//   clyde:  celda de Pacman si distancia Manhattan > 8, si no la esquina
+function ghostTarget( game, g ) {
+  const p = game.pacman;
+  const px = Math.round( p.x );
+  const py = Math.round( p.y );
+  const d = DIRS[ p.dir ] || { x: 0, y: 0 };
+  const maxX = game.grid[ 0 ].length - 1;
+  const maxY = game.grid.length - 1;
+
+  switch ( g.kind ) {
+    case 'blinky':
+      return { x: px, y: py };
+    case 'pinky':
+      return {
+        x: clampTile( px + d.x * 4, maxX ),
+        y: clampTile( py + d.y * 4, maxY ),
+      };
+    case 'inky': {
+      const blinky = game.ghosts.find( ( gh ) => gh.kind === 'blinky' );
+      const bx = blinky ? Math.round( blinky.x ) : px;
+      const by = blinky ? Math.round( blinky.y ) : py;
+      return {
+        x: clampTile( ( px + d.x * 2 ) * 2 - bx, maxX ),
+        y: clampTile( ( py + d.y * 2 ) * 2 - by, maxY ),
+      };
+    }
+    case 'clyde': {
+      const dist = Math.abs( g.x - px ) + Math.abs( g.y - py );
+      if ( dist > 8 ) return { x: px, y: py };
+      return { x: 1, y: 28 };
+    }
+  }
+  return { x: px, y: py };
+}
+
 function decideGhost( game, g ) {
   const grid = game.grid;
-  const p = game.pacman;
 
   const options = Object.keys( DIRS ).filter(
     ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
@@ -120,25 +164,20 @@ function decideGhost( game, g ) {
   // Sin salida (callejon): permitir el giro de 180.
   const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
 
-  if ( g.kind === 'hunter' ) {
-    const px = Math.round( p.x );
-    const py = Math.round( p.y );
-    let best = choices[ 0 ];
-    let bestDist = Infinity;
-    for ( const dir of choices ) {
-      const d = DIRS[ dir ];
-      const nx = g.x + d.x;
-      const ny = g.y + d.y;
-      const dist = Math.abs( nx - px ) + Math.abs( ny - py );
-      if ( dist < bestDist ) {
-        bestDist = dist;
-        best = dir;
-      }
+  const target = ghostTarget( game, g );
+  let best = choices[ 0 ];
+  let bestDist = Infinity;
+  for ( const dir of choices ) {
+    const d = DIRS[ dir ];
+    const nx = g.x + d.x;
+    const ny = g.y + d.y;
+    const dist = Math.abs( nx - target.x ) + Math.abs( ny - target.y );
+    if ( dist < bestDist ) {
+      bestDist = dist;
+      best = dir;
     }
-    g.dir = best;
-  } else {
-    g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
   }
+  g.dir = best;
 }
 
 function moveGhost( game, g ) {
@@ -164,6 +203,7 @@ function resetPositions( game ) {
   p.y = PACMAN_START.y;
   p.dir = 'left';
   p.nextDir = null;
+  game.time = 0;
   game.ghosts.forEach( ( g, i ) => {
     g.x = GHOST_STARTS[ i ].x;
     g.y = GHOST_STARTS[ i ].y;
@@ -175,9 +215,12 @@ function collides( a, b ) {
   return Math.abs( a.x - b.x ) < 0.5 && Math.abs( a.y - b.y ) < 0.5;
 }
 
-function update( game ) {
+function update( game, dt ) {
+  game.time += dt;
   movePacman( game );
-  game.ghosts.forEach( ( g ) => moveGhost( game, g ) );
+  game.ghosts.forEach( ( g ) => {
+    if ( game.time >= g.delay ) moveGhost( game, g );
+  } );
 
   for ( const g of game.ghosts ) {
     if ( collides( game.pacman, g ) ) {
