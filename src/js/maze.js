@@ -51,6 +51,8 @@ const MAZE = MAZE_STR.map( ( row ) => row.split( '' ).map( parseTile ) );
 
 const TUNNEL_ROW = 14;
 const PACMAN_START = { x: 13, y: 23 };
+const GHOST_EXIT = { x: 13, y: 11 }; // pasillo justo encima de la puerta
+const PEN_X = { min: 11, max: 16 };   // rebote confinado a estas columnas
 const GHOST_STARTS = [
   { x: 13, y: 13, kind: 'blinky', delay: 0 },
   { x: 14, y: 13, kind: 'pinky', delay: 3 },
@@ -62,3 +64,5 @@ window.MAZE = MAZE;
 window.TUNNEL_ROW = TUNNEL_ROW;
 window.PACMAN_START = PACMAN_START;
 window.GHOST_STARTS = GHOST_STARTS;
+window.GHOST_EXIT = GHOST_EXIT;
+window.PEN_X = PEN_X;
